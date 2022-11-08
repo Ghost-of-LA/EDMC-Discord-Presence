@@ -39,12 +39,14 @@ CLIENT_ID = 386149818227097610
 
 VERSION = '3.1.0'
 
-# Add global var for Planet name (landing + around)
-planet = '<Hidden>'
-landingPad = '2'
-
 this = sys.modules[__name__]  # For holding module globals
 
+czLocation = ""
+superCruise = ""
+bodyName = ""
+taxiDestination = ""
+stationGuess = ""
+srvName = ""
 
 def callback(result):
     logger.info(f'Callback: {result}')
@@ -70,6 +72,7 @@ def update_presence():
         if config.getint("disable_presence") == 0:
             this.activity.state = this.presence_state
             this.activity.details = this.presence_details
+            
     else:
         logger.info('EDMC core version is at least 5.0.0-beta1')
         if config.get_int("disable_presence") == 0:
@@ -127,75 +130,198 @@ def plugin_stop():
 
 
 def journal_entry(cmdr, is_beta, system, station, entry, state):
-    global planet
-    global landingPad
+    global bodyName 
+    global czLocation 
+    global superCruise
+    global taxiDestination
+    global stationGuess
+    global srvName
+    
     presence_state = this.presence_state
     presence_details = this.presence_details
-    if entry['event'] == 'StartUp':
-        presence_state = _('In system {system}').format(system=system)
-        if station is None:
-            presence_details = _('Flying in normal space')
+    
+    if entry['event'] == 'Location':
+        if "OnFoot" in entry:
+            if entry['OnFoot'] == True:
+                if entry['BodyType'] == "Station":
+                    presence_details = 'On foot at ' + entry["Body"]
+                elif entry['BodyType'] == "Planet":
+                    presence_details = 'On foot on ' + entry["Body"]
         else:
-            presence_details = _('Docked at {station}').format(station=station)
-    elif entry['event'] == 'Location':
-        presence_state = _('In system {system}').format(system=system)
-        if station is None:
-            presence_details = _('Flying in normal space')
-        else:
-            presence_details = _('Docked at {station}').format(station=station)
-    elif entry['event'] == 'StartJump':
-        presence_state = _('Jumping')
-        if entry['JumpType'] == 'Hyperspace':
-            presence_details = _('Jumping to system {system}').format(system=entry['StarSystem'])
-        elif entry['JumpType'] == 'Supercruise':
-            presence_details = _('Preparing for supercruise')
-    elif entry['event'] == 'SupercruiseEntry':
-        presence_state = _('In system {system}').format(system=system)
-        presence_details = _('Supercruising')
-    elif entry['event'] == 'SupercruiseExit':
-        presence_state = _('In system {system}').format(system=system)
-        presence_details = _('Flying in normal space')
-    elif entry['event'] == 'FSDJump':
-        presence_state = _('In system {system}').format(system=system)
-        presence_details = _('Supercruising')
-    elif entry['event'] == 'Docked':
-        presence_state = _('In system {system}').format(system=system)
-        presence_details = _('Docked at {station}').format(station=station)
-    elif entry['event'] == 'Undocked':
-        presence_state = _('In system {system}').format(system=system)
-        presence_details = _('Flying in normal space')
-    elif entry['event'] == 'ShutDown':
-        presence_state = _('Connecting CMDR Interface')
-        presence_details = ''
-    elif entry['event'] == 'DockingGranted':
-        landingPad = entry['LandingPad']
-    elif entry['event'] == 'Music':
-        if entry['MusicTrack'] == 'MainMenu':
-            presence_state = _('Connecting CMDR Interface')
-            presence_details = ''
-    # Todo: This elif might not be executed on undocked. Functionality can be improved
-    elif entry['event'] == 'Undocked' or entry['event'] == 'DockingCancelled' or entry['event'] == 'DockingTimeout':
-        presence_details = _('Flying near {station}').format(station=entry['StationName'])
-    # Planetary events
-    elif entry['event'] == 'ApproachBody':
-        presence_details = _('Approaching {body}').format(body=entry['Body'])
-        planet = entry['Body']
-    elif entry['event'] == 'Touchdown' and entry['PlayerControlled']:
-        presence_details = _('Landed on {body}').format(body=planet)
-    elif entry['event'] == 'Liftoff' and entry['PlayerControlled']:
-        if entry['PlayerControlled']:
-            presence_details = _('Flying around {body}').format(body=planet)
-        else:
-            presence_details = _('In SRV on {body}, ship in orbit').format(body=planet)
-    elif entry['event'] == 'LeaveBody':
-        presence_details = _('Supercruising')
+            if entry['Docked'] == True:
+                    presence_details = 'Docked at ' + entry["StationName"]
+            elif entry['Docked'] == False:
+                if entry['Taxi'] == True:
+                    if state['Dropship'] == True:
+                        presence_details = 'Taking a dropship back to ' + taxiDestination
+                    else:
+                        if taxiDestination != "":
+                            presence_details = 'Taking a taxi to ' + taxiDestination
+                        else:
+                            presence_details = 'Taking a taxi'
+                elif entry['BodyType'] == "Planet":
+                    presence_details = 'On ' + entry["Body"]
+                else:
+                    presence_details = 'Flying in normal space'
+        presence_state = 'In ' + entry['StarSystem']
 
-    # EXTERNAL VEHICLE EVENTS
+    elif entry['event'] == 'Embark':
+        if entry['Taxi'] == True and state['Dropship'] != True:
+            if taxiDestination != "":
+                presence_details = 'Taking a taxi to ' + taxiDestination
+            else:
+                presence_details = 'Taking a taxi'
+        elif state['Dropship'] == True:
+            if czLocation != "":
+                presence_details = 'Taking a dropship to ' + czLocation
+            else:
+                presence_details = 'Taking a dropship'
+        elif entry['OnStation'] == True:
+            presence_details = 'Docked at ' + entry['StationName']
+        elif entry['SRV'] == True:
+            if srvName != "":
+                presence_details = 'Driving ' + srvName + ' On ' + entry['Body']
+            else:
+                presence_details = 'Driving SRV On ' + entry['Body'] 
+        elif entry['OnPlanet'] == True:
+            if station is not None:
+                presence_details = 'Docked at ' + station
+            elif stationGuess != "":
+                presence_details = 'Docked at ' + stationGuess
+            else:
+                presence_details = 'On ' + entry['Body']
+        presence_state = 'In ' + entry['StarSystem']
+            
+    elif entry['event'] == 'Disembark':
+        if station is not None:
+            presence_details = 'On foot at ' + station
+        elif stationGuess != "":
+            presence_details = 'On foot at ' + stationGuess
+        elif entry['OnStation'] == True:
+            presence_details = 'On foot at ' + entry['StationName']
+        elif entry['OnPlanet'] == True:
+            presence_details = 'On foot on ' + entry['Body']
+            bodyName = entry['Body']
+        presence_state = 'In ' + entry['StarSystem']
+        taxiDestination = ""
+        
     elif entry['event'] == 'LaunchSRV':
-        presence_details = _('In SRV on {body}').format(body=planet)
+        if entry['PlayerControlled'] == True:
+            if bodyName != "":
+                presence_details = 'Driving ' + entry['SRVType_Localised'][4:] + ' on ' + bodyName
+            else:
+                presence_details = 'Driving ' + entry['SRVType_Localised'][4:]
+            srvName = entry['SRVType_Localised'][4:]
+                
     elif entry['event'] == 'DockSRV':
-        presence_details = _('Landed on {body}').format(body=planet)
+        if bodyName != "":
+            presence_details = 'On ' + bodyName
+        else:
+            presence_details = 'In ship on planet surface'
+        srvName = ""
+            
+    elif entry['event'] == "Touchdown":
+        if entry['PlayerControlled'] == True:
+            presence_details = 'Landed On ' + entry['Body']
+            presence_state = 'In ' + entry['StarSystem']
+            bodyName = entry['Body']
+        
+    elif entry['event'] == "Liftoff":
+        if state['Taxi'] != True and entry['PlayerControlled'] == True:
+            presence_details = 'Flying On ' + entry['Body']
+            presence_state = 'In ' + entry['StarSystem']
+ 
+    elif entry['event'] == "ApproachBody":
+        if state['Taxi'] != True and state['Dropship'] != True and superCruise != "Y":
+            presence_details = 'Flying On ' + entry['Body']
+        presence_state = 'In ' + entry['StarSystem']  
+        bodyName = entry['Body']
+        
+    elif entry['event'] == "LeaveBody":
+        if state['Taxi'] != True and state['Dropship'] != True and superCruise != "Y":
+            presence_details = 'Flying in normal space'
+        presence_state = 'In ' + entry['StarSystem']
+        bodyName = ""
+        
+    elif entry['event'] == "Docked":
+        presence_details = 'Docked at ' + entry['StationName']
+        presence_state = 'In ' + entry['StarSystem']
+        stationGuess = entry['StationName']
+        
+    elif entry['event'] == "Undocked":
+        if entry['Taxi'] != True and state['Dropship'] != True:
+            if entry['StationType'] == "OnFootSettlement" or entry['StationType'] == "CraterOutpost":
+                if bodyName == "":
+                    presence_details = 'Leaving ' + entry['StationName']
+                else:
+                    presence_details = 'Flying on ' + bodyName
+            else:
+                presence_details = 'Flying in normal space'
+        presence_state = 'In ' + system 
+        stationGuess = ""
+        
+    elif entry['event'] == 'StartJump':
+        if state['Taxi'] != True and state['Dropship'] != True:
+            if entry['JumpType'] == 'Hyperspace':
+                presence_details = 'Jumping to ' + entry['StarSystem']
+                presence_state = 'From ' + system
+            elif entry['JumpType'] == 'Supercruise':
+                presence_details = 'Preparing for supercruise'
+                presence_state = 'In ' + system
+                superCruise = "Y"
+            
+    elif entry['event'] == 'SupercruiseEntry':
+        if state['Taxi'] != True and state['Dropship'] != True:
+            presence_details = 'Supercruising'
+        presence_state = "In " + entry['StarSystem']
+        superCruise = "Y"
+        
+    elif entry['event'] == 'SupercruiseExit':
+        if state['Taxi'] != True and state['Dropship'] != True:
+            if entry['BodyType'] == "Planet":
+                presence_details = 'Flying On ' + entry['Body']
+            else:
+                presence_details = 'Flying in normal space'
+        presence_state = 'In ' + entry['StarSystem']
+        superCruise = ""
+        
+    elif entry['event'] == 'FSDJump':
+        if state['Taxi'] != True and state['Dropship'] != True:
+            presence_details = 'Supercruising'
+        presence_state = 'In ' + entry['StarSystem']
+        superCruise = "Y"
+    
+    elif entry['event'] == 'BookDropship':
+        if entry['Retreat'] == False:
+            czLocation = entry['DestinationLocation']
+        elif entry['Retreat'] == True:
+            taxiDestination = entry['DestinationLocation']
 
+    elif entry['event'] == 'CancelDropship':
+        czLocation = ""
+    
+    elif entry['event'] == 'DropshipDeploy':
+        if czLocation == "":
+           presence_details = 'Combat zone on ' + entry['Body']
+        else:
+            presence_details = 'Combat zone at ' + czLocation
+        presence_state = 'In ' + system
+        
+    elif entry['event'] == 'BookTaxi':
+        taxiDestination = entry['DestinationLocation']
+    
+    elif entry['event'] == 'CancelTaxi':
+        taxiDestination = ""
+        
+    elif entry['event'] == 'Shutdown':
+        this.presence_state = _('Connecting CMDR Interface')
+        this.presence_details = ''
+        stationName = ""
+        czLocation = ""
+        superCruise = ""
+        bodyName = ""
+        taxiDestination = ""
+              
     if presence_state != this.presence_state or presence_details != this.presence_details:
         this.presence_state = presence_state
         this.presence_details = presence_details
