@@ -1,3 +1,5 @@
+Personal fork of the EDMC-Discord-Presence plugin. Added support for on foot activities.
+
 # EDMC-Discord-Presence
 
 A plugin for [Elite Dangerous Market Connector](https://github.com/Marginal/EDMarketConnector) that enables [Discord Rich Presence](https://discordapp.com/rich-presence) for [Elite Dangerous](https://www.elitedangerous.com/)
